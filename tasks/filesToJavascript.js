@@ -45,14 +45,23 @@ FilesToJavascriptTask.taskDescription = 'Appends file contents to Javascript var
 
 FilesToJavascriptTask.Defaults = {
     inputFilePrefix: '',
+    inputFileExtension: '',
     useIndexes: false,
     shouldMinify: false,
-    inputFileExtension: ''
+    shouldBase64: false
 };
 
 var commentJson = require('comment-json');
 
 FilesToJavascriptTask.prototype = {
+
+    base64Encode: function(abspath,buffer) {
+        var ret = 'data:';
+        ret += mime.lookup(abspath);
+        ret += ';base64,';
+        ret += buffer.toString('base64');
+        return ret;
+    },
 
     run : function () {
 
@@ -117,14 +126,19 @@ FilesToJavascriptTask.prototype = {
                 }
 
                 // read the file
-                var inputFileString = grunt.file.read(abspath);
-                // remove the new lines and escape apostrophs '
-                inputFileString = inputFileString.replace(/\n/g, '').replace(/\'/g, '&apos;');
-
-                if (options.shouldMinify) {
-                  var parsedJson = commentJson.parse(inputFileString);
-                  inputFileString = commentJson.stringify(parsedJson);
-                  parsedJson = null;
+                var inputFileString;
+    
+                if (options.shouldBase64) {
+                    inputFileString = base64Encode(abspath,grunt.file.read(abspath,{ encoding: null }));
+                } else {
+                    // remove the new lines and escape apostrophs '
+                    inputFileString = grunt.file.read(abspath).replace(/\n/g, '').replace(/\'/g, '&apos;');
+    
+                    if (options.shouldMinify) {
+                        var parsedJson = commentJson.parse(inputFileString);
+                        inputFileString = commentJson.stringify(parsedJson);
+                        parsedJson = null;
+                    }
                 }
 
                 var fullProperty = options.outputBaseFileVariable +
