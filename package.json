@@ -28,7 +28,8 @@
     "test": "grunt test"
   },
   "dependencies": {
-    "comment-json": "~0.1.11"
+    "comment-json": "~0.1.11",
+    "mime" : "1.2.x"
   },
   "devDependencies": {
     "grunt-contrib-jshint": "~0.6.0",
