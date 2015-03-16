@@ -15,6 +15,15 @@
  * <inputFilesFolder>**(<inputFilePrefix>)(indexString)property.<inputFileExtension>
  * (required)            (def: '')                              (def: any extension)
  *
+ * <useFileName> : boolean/string (def: false)
+ *
+ * if useFileName===true
+ * then the variable name will be the absolute path of the file
+ *
+ * if useFileName===string
+ * then the variable name will be the absolute path of the file, without the value of useFileName 
+ * A useFileName value of '../public_html/' will change an absolute path of '../public_html/img/photo.jpg' to 'img/photo.jpg'
+ * 
  * <useIndexes> : boolean (def: false)
  * <variableIndexMap> : indexString->index (def: undefined)
  *
@@ -47,6 +56,7 @@ FilesToJavascriptTask.Defaults = {
     inputFilePrefix: '',
     inputFileExtension: '',
     useIndexes: false,
+    useFileName: false,
     shouldMinify: false,
     shouldBase64: false
 };
@@ -119,6 +129,9 @@ FilesToJavascriptTask.prototype = {
                            ' . Please add it to your options.');
                     }
 
+                } else if ( options.useFileName ) {
+                    shouldUseIndexes = true;
+                    variableIndex = '\'' + abspath.replace(options.useFileName,'') + '\'';
                 } else {
                     // if no index should be used, the the property matches the file name without the extension
                     fileNamePropertyOnly = fileNameWithoutIndexString.substr(
