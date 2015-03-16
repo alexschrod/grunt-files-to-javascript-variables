@@ -7,6 +7,8 @@
  */
 'use strict';
 
+var mime = require('mime');
+
 /**
  * A task that appends all files in a given folder to JavaScript variables.
  * Every file name has a format containing the property name of the Javascript variable.
@@ -23,7 +25,7 @@
  * if useFileName===string
  * then the variable name will be the absolute path of the file, without the value of useFileName 
  * A useFileName value of '../public_html/' will change an absolute path of '../public_html/img/photo.jpg' to 'img/photo.jpg'
- * 
+ *
  * <useIndexes> : boolean (def: false)
  * <variableIndexMap> : indexString->index (def: undefined)
  *
@@ -78,6 +80,7 @@ FilesToJavascriptTask.prototype = {
         this.checkOptions();
         var grunt = this.grunt;
         var options = this.options;
+        var base64Encode = this.base64Encode;
 
         // this string will contain all file contents and will be written in the output file at the end.
         var outputFileString = '';
@@ -87,90 +90,103 @@ FilesToJavascriptTask.prototype = {
             var prefixDefined = options.inputFilePrefix.length > 0;
             var fileNameStartsWithPrefix = options.inputFilePrefix.length > 0 &&
                                             filename.startsWith(options.inputFilePrefix);
-            var fileExtensionDefined = options.inputFileExtension.length > 0;
 
-            if ( (!prefixDefined || fileNameStartsWithPrefix) &&
-                 (!fileExtensionDefined ||
-                     (options.inputFileExtension !== undefined &&
-                      filename.endsWith(options.inputFileExtension)) ) ) {
-
-                grunt.log.debug('File : ' + abspath);
-
-                // (<inputFilePrefix>-)(indexString-)property.<inputFileExtension>
-                var fileNameWithoutPrefix = filename;
-                if (options.inputFilePrefix.length > 1) {
-                    fileNameWithoutPrefix = filename.substr(options.inputFilePrefix.length, filename.length);
-                }
-
-                var variableIndex = null;
-                var fileNameWithoutIndexString = fileNameWithoutPrefix;
-                var fileNamePropertyOnly = null;
-
-                var shouldUseIndexes = options.useIndexes && options.variableIndexMap !== undefined;
-
-                if (shouldUseIndexes) {
-                    var indexKeys = Object.keys(options.variableIndexMap);
-
-                    var numOfKeys = indexKeys.length;
-                    for (var keyIndex = 0; keyIndex < numOfKeys; keyIndex++) {
-                        var currentKey = indexKeys[keyIndex];
-
-                        if (fileNameWithoutPrefix.startsWith(currentKey)) {
-                            variableIndex = options.variableIndexMap[currentKey];
-
-                            fileNameWithoutIndexString = fileNameWithoutIndexString.substr(currentKey.length);
-                            fileNamePropertyOnly = fileNameWithoutIndexString.substr(
-                                                    0, fileNameWithoutIndexString.lastIndexOf('.'));
-                        }
-                    }
-
-                    if (variableIndex === null) {
-                       grunt.fail.warn('No index string found in the options for the file' + abspath +
-                           ' . Please add it to your options.');
-                    }
-
-                } else if ( options.useFileName ) {
-                    shouldUseIndexes = true;
-                    variableIndex = '\'' + abspath.replace(options.useFileName,'') + '\'';
-                } else {
-                    // if no index should be used, the the property matches the file name without the extension
-                    fileNamePropertyOnly = fileNameWithoutIndexString.substr(
-                                            0, fileNameWithoutIndexString.lastIndexOf('.'));
-                }
-
-                // read the file
-                var inputFileString;
-    
-                if (options.shouldBase64) {
-                    inputFileString = base64Encode(abspath,grunt.file.read(abspath,{ encoding: null }));
-                } else {
-                    // remove the new lines and escape apostrophs '
-                    inputFileString = grunt.file.read(abspath).replace(/\n/g, '').replace(/\'/g, '&apos;');
-    
-                    if (options.shouldMinify) {
-                        var parsedJson = commentJson.parse(inputFileString);
-                        inputFileString = commentJson.stringify(parsedJson);
-                        parsedJson = null;
-                    }
-                }
-
-                var fullProperty = options.outputBaseFileVariable +
-                    (shouldUseIndexes? '[' + variableIndex + ']' : '' ) +
-                    (fileNamePropertyOnly.length > 0 ? '.' + fileNamePropertyOnly : '') +
-                    (options.outputBaseFileVariableSuffix? options.outputBaseFileVariableSuffix : '');
-
-                grunt.log.debug('File contents added to: ' + fullProperty);
-
-                if (options.inputFileExtension === 'json') {
-                  // leave the json contents, without quoting them.
-                } else {
-                  // quote everything which is not json
-                  inputFileString = '\'' + inputFileString + '\'';
-                }
-
-                outputFileString += '\n' + fullProperty +
-                    ' = ' + inputFileString + ';\n';
+            if ( prefixDefined && !fileNameStartsWithPrefix ) {
+              return false;
             }
+
+            if ( options.inputFileExtension.length > 0 ) {
+              if ( Array.isArray(options.inputFileExtension) ) {
+                var i = options.inputFileExtension.length,
+                    hasExtension = false;
+                while (i--) {
+                  if ( filename.endsWith(options.inputFileExtension[i]) ) {
+                    hasExtension = true;
+                    break;
+                  }
+                }
+                if ( !hasExtension ) { return false; }
+              } else if ( !filename.endsWith(options.inputFileExtension) ) {
+                return false;
+              }
+            }
+
+            grunt.log.debug('File : ' + abspath);
+
+            // (<inputFilePrefix>-)(indexString-)property.<inputFileExtension>
+            var fileNameWithoutPrefix = filename;
+            if (options.inputFilePrefix.length > 1) {
+                fileNameWithoutPrefix = filename.substr(options.inputFilePrefix.length, filename.length);
+            }
+
+            var variableIndex = null;
+            var fileNameWithoutIndexString = fileNameWithoutPrefix;
+            var fileNamePropertyOnly = "";
+
+            var shouldUseIndexes = options.useIndexes && options.variableIndexMap !== undefined;
+
+            if (shouldUseIndexes) {
+                var indexKeys = Object.keys(options.variableIndexMap);
+
+                var numOfKeys = indexKeys.length;
+                for (var keyIndex = 0; keyIndex < numOfKeys; keyIndex++) {
+                    var currentKey = indexKeys[keyIndex];
+
+                    if (fileNameWithoutPrefix.startsWith(currentKey)) {
+                        variableIndex = options.variableIndexMap[currentKey];
+
+                        fileNameWithoutIndexString = fileNameWithoutIndexString.substr(currentKey.length);
+                        fileNamePropertyOnly = fileNameWithoutIndexString.substr(
+                                                0, fileNameWithoutIndexString.lastIndexOf('.'));
+                    }
+                }
+
+                if (variableIndex === null) {
+                    grunt.fail.warn('No index string found in the options for the file' + abspath +
+                       ' . Please add it to your options.');
+                }
+
+            } else if ( options.useFileName ) {
+                shouldUseIndexes = true;
+                variableIndex = '\'' + abspath.replace(options.useFileName,'') + '\'';
+            } else {
+                // if no index should be used, the the property matches the file name without the extension
+                fileNamePropertyOnly = fileNameWithoutIndexString.substr(
+                                      0, fileNameWithoutIndexString.lastIndexOf('.'));
+            }
+
+            // read the file
+            var inputFileString;
+
+            if (options.shouldBase64) {
+                inputFileString = base64Encode(abspath,grunt.file.read(abspath,{ encoding: null }));
+            } else {
+                // remove the new lines and escape apostrophs '
+                inputFileString = grunt.file.read(abspath).replace(/\n/g, '').replace(/\'/g, '&apos;');
+
+                if (options.shouldMinify) {
+                    var parsedJson = commentJson.parse(inputFileString);
+                    inputFileString = commentJson.stringify(parsedJson);
+                    parsedJson = null;
+                }
+            }
+
+            var fullProperty = options.outputBaseFileVariable +
+                (shouldUseIndexes? '[' + variableIndex + ']' : '' ) +
+                (fileNamePropertyOnly.length > 0 ? '.' + fileNamePropertyOnly : '') +
+                (options.outputBaseFileVariableSuffix? options.outputBaseFileVariableSuffix : '');
+
+            grunt.log.debug('File contents added to: ' + fullProperty);
+
+            if (options.inputFileExtension === 'json') {
+              // leave the json contents, without quoting them.
+            } else {
+              // quote everything which is not json
+              inputFileString = '\'' + inputFileString + '\'';
+            }
+
+            outputFileString += '\n' + fullProperty +
+                ' = ' + inputFileString + ';\n';
         });
 
         var outputBaseFileString = grunt.file.read(options.outputBaseFile);
