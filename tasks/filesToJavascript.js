@@ -162,7 +162,7 @@ FilesToJavascriptTask.prototype = {
                 inputFileString = base64Encode(abspath,grunt.file.read(abspath,{ encoding: null }));
             } else {
                 // remove the new lines and escape apostrophs '
-                inputFileString = grunt.file.read(abspath).replace(/\n/g, '').replace(/\'/g, '&apos;');
+                inputFileString = grunt.file.read(abspath).replace(/\n/g, '\\n');
 
                 if (options.shouldMinify) {
                     var parsedJson = commentJson.parse(inputFileString);
